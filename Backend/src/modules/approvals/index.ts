@@ -40,7 +40,7 @@ export const approvalRoutes = new Elysia()
         userId: memberships.userId,
         fullName: users.fullName,
         email: users.email,
-        requestedRole: memberships.role,
+        role: memberships.role,
         trackId: memberships.trackId,
         trackName: tracks.name,
         status: memberships.status,

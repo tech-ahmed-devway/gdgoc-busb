@@ -162,7 +162,7 @@ export async function runSeed() {
     const [createdHead] = await db
       .insert(users)
       .values({
-        fullName: "Omar Tarek",
+        fullName: "Ahmed Magdy",
         email: sampleHeadEmail,
         passwordHash: passHash,
         role: "head",
@@ -180,7 +180,7 @@ export async function runSeed() {
       approvedBy: organizerId,
       approvedAt: new Date(),
     });
-    console.log(`✅ Seeded Sample Track Head: ${sampleHeadEmail}`);
+    console.log(`Seeded Sample Track Head: ${sampleHeadEmail}`);
 
     // Seed sample approved session
     const [s1] = await db

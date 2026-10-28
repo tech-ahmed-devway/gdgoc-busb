@@ -64,7 +64,7 @@ export class StorageService {
     const localFilePath = path.join(this.localUploadsDir, `${timestamp}-${sanitizedName}`);
     fs.writeFileSync(localFilePath, Buffer.from(options.buffer));
 
-    const publicUrl = `/api/v1/assets/local/${timestamp}-${sanitizedName}`;
+    const publicUrl = `/assets/local/${timestamp}-${sanitizedName}`;
 
     return {
       storagePath,
@@ -98,7 +98,7 @@ export class StorageService {
         .getPublicUrl(storagePath);
       return data.publicUrl;
     }
-    return `/api/v1/assets/local/${path.basename(storagePath)}`;
+    return `/assets/local/${path.basename(storagePath)}`;
   }
 }
 

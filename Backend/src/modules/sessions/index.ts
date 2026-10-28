@@ -17,6 +17,7 @@ import {
   isApprovedLeader,
 } from '../../middleware/auth';
 import { logAudit } from '../../lib/audit';
+import { StorageService } from '../../lib/storage';
 
 export const sessionRoutes = new Elysia({ prefix: '/sessions' })
   // List sessions with filtering, pagination, and search
@@ -206,7 +207,7 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
     }
 
     // Fetch assets
-    const assets = await db
+    const rawAssets = await db
       .select({
         id: sessionAssets.id,
         storagePath: sessionAssets.storagePath,
@@ -217,6 +218,11 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
       })
       .from(sessionAssets)
       .where(eq(sessionAssets.sessionId, id));
+
+    const assets = rawAssets.map((asset) => ({
+      ...asset,
+      url: StorageService.getPublicUrl(asset.storagePath),
+    }));
 
     // Fetch review history
     const reviews = await db
@@ -328,8 +334,12 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         );
       }
 
-      const workflowStatus = action === 'submit' ? 'submitted' : 'draft';
-      const submittedAt = action === 'submit' ? new Date() : null;
+      // If created by Head/Vice Head (or any track leader submitting), automatically approve and make immediately visible without review
+      const isLeader = isApprovedLeader(user);
+      const workflowStatus = isLeader
+        ? 'approved'
+        : (action === 'submit' ? 'submitted' : 'draft');
+      const submittedAt = (isLeader || action === 'submit') ? new Date() : null;
 
       const [newSession] = await db
         .insert(sessions)
@@ -352,12 +362,16 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
           workflowStatus,
           createdBy: user.id,
           submittedAt,
+          reviewedBy: isLeader ? user.id : null,
+          reviewedAt: isLeader ? new Date() : null,
         })
         .returning();
 
       await logAudit({
         actorId: user.id,
-        action: action === 'submit' ? 'SESSION_SUBMITTED' : 'SESSION_DRAFT_CREATED',
+        action: isLeader
+          ? 'SESSION_CREATED_AUTO_APPROVED'
+          : (action === 'submit' ? 'SESSION_SUBMITTED' : 'SESSION_DRAFT_CREATED'),
         resourceType: 'session',
         resourceId: newSession.id,
         metadata: {
@@ -370,7 +384,9 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
 
       return {
         success: true,
-        message: action === 'submit' ? 'Session report submitted for review' : 'Session report draft saved',
+        message: isLeader
+          ? 'Session report created and published successfully'
+          : (action === 'submit' ? 'Session report submitted for review' : 'Session report draft saved'),
         data: newSession,
       };
     },
@@ -419,6 +435,11 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
 
       if (!existing) {
         throw new AppError('Session report not found', 404, 'SESSION_NOT_FOUND');
+      }
+
+      // Organizers are not permitted to edit session reports; reports belong to track leaders
+      if (isOrganizer(user)) {
+        throw new AppError('Organizers cannot edit session reports. Only track leaders can modify them.', 403, 'ORGANIZER_CANNOT_EDIT_SESSION');
       }
 
       // Check track authorization
