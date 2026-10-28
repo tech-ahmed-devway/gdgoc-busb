@@ -252,13 +252,12 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         .where(eq(users.email, normalizedEmail))
         .limit(1);
 
-      // Security requirement: Never reveal whether an email exists
       if (!user) {
-        return {
-          success: true,
-          message:
-            "If an account exists with this email, password reset instructions have been generated.",
-        };
+        throw new AppError(
+          "No account registered with this email address",
+          404,
+          "EMAIL_NOT_FOUND",
+        );
       }
 
       // Generate recovery token (1 hour validity)
@@ -278,19 +277,107 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         resourceId: user.id,
       });
 
-      // In production, send via email provider. In development, return the token safely for testing
-      const isDev = process.env.NODE_ENV !== "production";
-
       return {
         success: true,
-        message:
-          "If an account exists with this email, password reset instructions have been generated.",
-        ...(isDev ? { devResetToken: token } : {}),
+        message: "Email verified. You can now reset your password.",
+        data: {
+          token,
+          email: user.email,
+          fullName: user.fullName,
+        },
       };
     },
     {
       body: t.Object({
         email: t.String({ format: "email" }),
+      }),
+    },
+  )
+
+  // Direct Password Reset by Verified Email
+  .post(
+    "/direct-reset-password",
+    async ({ body }) => {
+      const { email, token, newPassword, confirmPassword } = body;
+      const normalizedEmail = email.toLowerCase().trim();
+
+      if (newPassword !== confirmPassword) {
+        throw new AppError("Passwords do not match", 400, "PASSWORDS_MISMATCH");
+      }
+
+      if (newPassword.length < 8) {
+        throw new AppError(
+          "Password must be at least 8 characters long",
+          400,
+          "PASSWORD_TOO_SHORT",
+        );
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, normalizedEmail))
+        .limit(1);
+
+      if (!user) {
+        throw new AppError("User account not found", 404, "USER_NOT_FOUND");
+      }
+
+      // Validate token if provided
+      if (token) {
+        const tokenHash = hashToken(token);
+        const [resetRecord] = await db
+          .select()
+          .from(passwordResets)
+          .where(
+            and(
+              eq(passwordResets.userId, user.id),
+              eq(passwordResets.tokenHash, tokenHash),
+              gt(passwordResets.expiresAt, new Date()),
+              isNull(passwordResets.usedAt),
+            ),
+          )
+          .limit(1);
+
+        if (!resetRecord) {
+          throw new AppError(
+            "Invalid or expired password reset session",
+            400,
+            "INVALID_RESET_TOKEN",
+          );
+        }
+
+        await db
+          .update(passwordResets)
+          .set({ usedAt: new Date() })
+          .where(eq(passwordResets.id, resetRecord.id));
+      }
+
+      const newPasswordHash = await hashPassword(newPassword);
+
+      await db
+        .update(users)
+        .set({ passwordHash: newPasswordHash, updatedAt: new Date() })
+        .where(eq(users.id, user.id));
+
+      await logAudit({
+        actorId: user.id,
+        action: "PASSWORD_RESET_COMPLETED",
+        resourceType: "user",
+        resourceId: user.id,
+      });
+
+      return {
+        success: true,
+        message: "Password has been updated successfully. You can now log in.",
+      };
+    },
+    {
+      body: t.Object({
+        email: t.String({ format: "email" }),
+        token: t.Optional(t.String()),
+        newPassword: t.String({ minLength: 8 }),
+        confirmPassword: t.String({ minLength: 8 }),
       }),
     },
   )
