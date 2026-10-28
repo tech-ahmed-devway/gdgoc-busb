@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: gdgoc-busb-backend
+    env: node
+    plan: free
+    rootDir: Backend
+    buildCommand: bun install
+    startCommand: bun run start
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: session-assets
+      - key: INITIAL_ORGANIZER_EMAIL
+        value: organizer@gdgoc-busb.org
+      - key: INITIAL_ORGANIZER_PASSWORD
+        sync: false
+      - key: INITIAL_ORGANIZER_NAME
+        value: Chapter Organizer
+

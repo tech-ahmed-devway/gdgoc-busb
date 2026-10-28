@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    /* Google Blue #4285F4 */
+    --primary: 217 89% 61%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 219 66% 52%;
+
+    --secondary: 214 32% 93%;
+    --secondary-foreground: 220 25% 15%;
+
+    --muted: 210 20% 95%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 214 32% 91%;
+    --accent-foreground: 220 25% 10%;
+
+    /* Google Red #EA4335 */
+    --destructive: 5 81% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 88%;
+    --ring: 217 89% 61%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 222 24% 9%;
+    --foreground: 210 25% 95%;
+
+    --card: 222 24% 13%;
+    --card-foreground: 210 25% 95%;
+
+    --popover: 222 24% 13%;
+    --popover-foreground: 210 25% 95%;
+
+    --primary: 217 89% 61%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 219 75% 68%;
+
+    --secondary: 220 20% 18%;
+    --secondary-foreground: 210 25% 90%;
+
+    --muted: 220 20% 16%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 220 20% 20%;
+    --accent-foreground: 210 25% 95%;
+
+    --destructive: 5 81% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 19%;
+    --input: 220 20% 22%;
+    --ring: 217 89% 61%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
