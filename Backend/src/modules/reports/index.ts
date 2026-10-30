@@ -41,7 +41,7 @@ export const reportRoutes = new Elysia({ prefix: '/reports' })
         pending: sql<number>`count(*) filter (where ${sessions.workflowStatus} = 'submitted')::int`,
         changesRequested: sql<number>`count(*) filter (where ${sessions.workflowStatus} = 'changes_requested')::int`,
         draft: sql<number>`count(*) filter (where ${sessions.workflowStatus} = 'draft')::int`,
-        totalAttendance: sql<number>`coalesce(sum(case when ${sessions.workflowStatus} = 'approved' then ${sessions.attendanceCount} else 0 end), 0)::int`,
+        totalAttendance: sql<number>`coalesce(sum(${sessions.attendanceCount}), 0)::int`,
       })
       .from(sessions)
       .where(whereClause);
@@ -54,7 +54,7 @@ export const reportRoutes = new Elysia({ prefix: '/reports' })
         totalSessions: sql<number>`count(*)::int`,
         approvedSessions: sql<number>`count(*) filter (where ${sessions.workflowStatus} = 'approved')::int`,
         pendingSessions: sql<number>`count(*) filter (where ${sessions.workflowStatus} = 'submitted')::int`,
-        attendance: sql<number>`coalesce(sum(case when ${sessions.workflowStatus} = 'approved' then ${sessions.attendanceCount} else 0 end), 0)::int`,
+        attendance: sql<number>`coalesce(sum(${sessions.attendanceCount}), 0)::int`,
       })
       .from(sessions)
       .innerJoin(tracks, eq(sessions.trackId, tracks.id))

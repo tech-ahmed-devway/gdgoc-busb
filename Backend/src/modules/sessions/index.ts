@@ -249,7 +249,7 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
     };
   })
 
-  // Create Session Report (Draft or Direct Submit)
+  // Create Session Report (Published immediately)
   .post(
     '/',
     async ({ body, headers, jwt }) => {
@@ -280,7 +280,6 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         notes,
         learningOutcomes,
         challengesFaced,
-        action = 'draft', // 'draft' or 'submit'
       } = body;
 
       // Track authorization check
@@ -306,11 +305,11 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
       }
 
       // Check online / offline conditional requirements
-      if (mode === 'online' && action === 'submit' && (!meetingUrl || !meetingUrl.startsWith('http'))) {
-        throw new AppError('Online sessions require a valid meeting URL before submission', 400, 'MISSING_MEETING_URL');
+      if (mode === 'online' && (!meetingUrl || !meetingUrl.startsWith('http'))) {
+        throw new AppError('Online sessions require a valid meeting URL', 400, 'MISSING_MEETING_URL');
       }
-      if (mode === 'offline' && action === 'submit' && (!location || location.trim().length === 0)) {
-        throw new AppError('Offline sessions require a physical location before submission', 400, 'MISSING_LOCATION');
+      if (mode === 'offline' && (!location || location.trim().length === 0)) {
+        throw new AppError('Offline sessions require a physical location', 400, 'MISSING_LOCATION');
       }
 
       // Check uniqueness of session_number per (track_id, season_id)
@@ -334,12 +333,8 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         );
       }
 
-      // If created by Head/Vice Head (or any track leader submitting), automatically approve and make immediately visible without review
-      const isLeader = isApprovedLeader(user);
-      const workflowStatus = isLeader
-        ? 'approved'
-        : (action === 'submit' ? 'submitted' : 'draft');
-      const submittedAt = (isLeader || action === 'submit') ? new Date() : null;
+      // Sessions are published immediately — visible to Organizer right away
+      const now = new Date();
 
       const [newSession] = await db
         .insert(sessions)
@@ -359,34 +354,30 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
           notes: notes?.trim() || null,
           learningOutcomes: learningOutcomes?.trim() || null,
           challengesFaced: challengesFaced?.trim() || null,
-          workflowStatus,
+          workflowStatus: 'approved',
           createdBy: user.id,
-          submittedAt,
-          reviewedBy: isLeader ? user.id : null,
-          reviewedAt: isLeader ? new Date() : null,
+          submittedAt: now,
+          reviewedBy: user.id,
+          reviewedAt: now,
         })
         .returning();
 
       await logAudit({
         actorId: user.id,
-        action: isLeader
-          ? 'SESSION_CREATED_AUTO_APPROVED'
-          : (action === 'submit' ? 'SESSION_SUBMITTED' : 'SESSION_DRAFT_CREATED'),
+        action: 'SESSION_PUBLISHED',
         resourceType: 'session',
         resourceId: newSession.id,
         metadata: {
           sessionNumber,
           title: newSession.title,
           trackId,
-          status: workflowStatus,
+          status: 'approved',
         },
       });
 
       return {
         success: true,
-        message: isLeader
-          ? 'Session report created and published successfully'
-          : (action === 'submit' ? 'Session report submitted for review' : 'Session report draft saved'),
+        message: 'Session report published successfully',
         data: newSession,
       };
     },
@@ -407,12 +398,11 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         notes: t.Optional(t.String()),
         learningOutcomes: t.Optional(t.String()),
         challengesFaced: t.Optional(t.String()),
-        action: t.Optional(t.Union([t.Literal('draft'), t.Literal('submit')])),
       }),
     }
   )
 
-  // Update Session Report
+  // Update Session Report (Handles both PATCH and PUT)
   .patch(
     '/:id',
     async ({ params: { id }, body, headers, jwt }) => {
@@ -437,27 +427,13 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         throw new AppError('Session report not found', 404, 'SESSION_NOT_FOUND');
       }
 
-      // Organizers are not permitted to edit session reports; reports belong to track leaders
-      if (isOrganizer(user)) {
-        throw new AppError('Organizers cannot edit session reports. Only track leaders can modify them.', 403, 'ORGANIZER_CANNOT_EDIT_SESSION');
-      }
-
-      // Check track authorization
+      // Check track authorization (Organizer or Track Head / Vice Head)
       if (!canAccessTrack(user, existing.trackId)) {
         throw new AppError('You do not have permission to modify this session', 403, 'FORBIDDEN');
       }
 
-      // Approved reports cannot be edited through ordinary update endpoints
-      if (existing.workflowStatus === 'approved' && !isOrganizer(user)) {
-        throw new AppError('Approved session reports cannot be edited', 400, 'CANNOT_EDIT_APPROVED');
-      }
-
-      // Check if trying to edit while under review (only organizer or changes requested)
-      if (existing.workflowStatus === 'submitted' && !isOrganizer(user)) {
-        throw new AppError('Report is currently under review. Wait for review feedback.', 400, 'IN_REVIEW');
-      }
-
       const updateData: Partial<typeof sessions.$inferInsert> = {
+        workflowStatus: 'approved',
         updatedAt: new Date(),
       };
 
@@ -514,65 +490,8 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
     }
   )
 
-  // Submit Draft for Review
-  .post('/:id/submit', async ({ params: { id }, headers, jwt }) => {
-    const authHeader = headers['authorization'];
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
-    }
-    const payload = (await (jwt as any).verify(authHeader.substring(7))) as { sub: string } | null;
-    if (!payload?.sub) {
-      throw new AppError('Unauthorized: Invalid or expired token', 401, 'INVALID_TOKEN');
-    }
-    const user = await resolveAuthUser(payload.sub);
-    if (!user) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
-
-    const [existing] = await db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.id, id))
-      .limit(1);
-
-    if (!existing) {
-      throw new AppError('Session report not found', 404, 'SESSION_NOT_FOUND');
-    }
-
-    if (!canAccessTrack(user, existing.trackId)) {
-      throw new AppError('You do not have permission to submit this session', 403, 'FORBIDDEN');
-    }
-
-    if (existing.workflowStatus !== 'draft') {
-      throw new AppError('Only draft sessions can be submitted', 400, 'INVALID_TRANSITION');
-    }
-
-    const now = new Date();
-    const [updated] = await db
-      .update(sessions)
-      .set({
-        workflowStatus: 'submitted',
-        submittedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(sessions.id, id))
-      .returning();
-
-    await logAudit({
-      actorId: user.id,
-      action: 'SESSION_SUBMITTED',
-      resourceType: 'session',
-      resourceId: id,
-    });
-
-    return {
-      success: true,
-      message: 'Session report submitted for Organizer review',
-      data: updated,
-    };
-  })
-
-  // Review Session (Organizer only: Approve or Request Changes)
-  .post(
-    '/:id/review',
+  .put(
+    '/:id',
     async ({ params: { id }, body, headers, jwt }) => {
       const authHeader = headers['authorization'];
       if (!authHeader?.startsWith('Bearer ')) {
@@ -583,15 +502,7 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         throw new AppError('Unauthorized: Invalid or expired token', 401, 'INVALID_TOKEN');
       }
       const user = await resolveAuthUser(payload.sub);
-      if (!isOrganizer(user)) {
-        throw new AppError('Only the Chapter Organizer can review session reports', 403, 'FORBIDDEN');
-      }
-
-      const { action, comment } = body;
-
-      if (action === 'changes_requested' && (!comment || comment.trim().length === 0)) {
-        throw new AppError('A meaningful review comment is required when requesting changes', 400, 'COMMENT_REQUIRED');
-      }
+      if (!user) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
 
       const [existing] = await db
         .select()
@@ -603,101 +514,64 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         throw new AppError('Session report not found', 404, 'SESSION_NOT_FOUND');
       }
 
-      const now = new Date();
-      const newStatus = action === 'approved' ? 'approved' : 'changes_requested';
+      if (!canAccessTrack(user, existing.trackId)) {
+        throw new AppError('You do not have permission to modify this session', 403, 'FORBIDDEN');
+      }
 
-      await db.transaction(async (tx) => {
-        await tx
-          .update(sessions)
-          .set({
-            workflowStatus: newStatus,
-            reviewedBy: user.id,
-            reviewedAt: now,
-            updatedAt: now,
-          })
-          .where(eq(sessions.id, id));
+      const updateData: Partial<typeof sessions.$inferInsert> = {
+        workflowStatus: 'approved',
+        updatedAt: new Date(),
+      };
 
-        await tx.insert(sessionReviews).values({
-          sessionId: id,
-          reviewerId: user.id,
-          action,
-          comment: comment.trim(),
-        });
-      });
+      if (body.title !== undefined) updateData.title = body.title.trim();
+      if (body.content !== undefined) updateData.content = body.content.trim();
+      if (body.sessionNumber !== undefined) updateData.sessionNumber = body.sessionNumber;
+      if (body.startsAt !== undefined) updateData.startsAt = new Date(body.startsAt);
+      if (body.endsAt !== undefined) updateData.endsAt = new Date(body.endsAt);
+      if (body.mode !== undefined) updateData.mode = body.mode;
+      if (body.meetingUrl !== undefined) updateData.meetingUrl = body.meetingUrl?.trim() || null;
+      if (body.location !== undefined) updateData.location = body.location?.trim() || null;
+      if (body.recordingUrl !== undefined) updateData.recordingUrl = body.recordingUrl?.trim() || null;
+      if (body.attendanceCount !== undefined) updateData.attendanceCount = body.attendanceCount;
+      if (body.notes !== undefined) updateData.notes = body.notes?.trim() || null;
+      if (body.learningOutcomes !== undefined) updateData.learningOutcomes = body.learningOutcomes?.trim() || null;
+      if (body.challengesFaced !== undefined) updateData.challengesFaced = body.challengesFaced?.trim() || null;
+
+      const [updatedSession] = await db
+        .update(sessions)
+        .set(updateData)
+        .where(eq(sessions.id, id))
+        .returning();
 
       await logAudit({
         actorId: user.id,
-        action: action === 'approved' ? 'SESSION_APPROVED' : 'SESSION_CHANGES_REQUESTED',
+        action: 'SESSION_UPDATED',
         resourceType: 'session',
         resourceId: id,
-        metadata: { comment: comment.trim() },
+        metadata: updateData,
       });
 
       return {
         success: true,
-        message: action === 'approved' ? 'Session report approved successfully' : 'Changes requested from track leadership',
+        message: 'Session report updated successfully',
+        data: updatedSession,
       };
     },
     {
       body: t.Object({
-        action: t.Union([t.Literal('approved'), t.Literal('changes_requested')]),
-        comment: t.String({ minLength: 1 }),
+        title: t.Optional(t.String()),
+        content: t.Optional(t.String()),
+        sessionNumber: t.Optional(t.Integer({ minimum: 1 })),
+        startsAt: t.Optional(t.String()),
+        endsAt: t.Optional(t.String()),
+        mode: t.Optional(t.Union([t.Literal('online'), t.Literal('offline')])),
+        meetingUrl: t.Optional(t.String()),
+        location: t.Optional(t.String()),
+        recordingUrl: t.Optional(t.String()),
+        attendanceCount: t.Optional(t.Integer({ minimum: 0 })),
+        notes: t.Optional(t.String()),
+        learningOutcomes: t.Optional(t.String()),
+        challengesFaced: t.Optional(t.String()),
       }),
     }
-  )
-
-  // Resubmit Session after Changes Requested
-  .post('/:id/resubmit', async ({ params: { id }, headers, jwt }) => {
-    const authHeader = headers['authorization'];
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
-    }
-    const payload = (await (jwt as any).verify(authHeader.substring(7))) as { sub: string } | null;
-    if (!payload?.sub) {
-      throw new AppError('Unauthorized: Invalid or expired token', 401, 'INVALID_TOKEN');
-    }
-    const user = await resolveAuthUser(payload.sub);
-    if (!user) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
-
-    const [existing] = await db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.id, id))
-      .limit(1);
-
-    if (!existing) {
-      throw new AppError('Session report not found', 404, 'SESSION_NOT_FOUND');
-    }
-
-    if (!canAccessTrack(user, existing.trackId)) {
-      throw new AppError('You do not have permission to resubmit this session', 403, 'FORBIDDEN');
-    }
-
-    if (existing.workflowStatus !== 'changes_requested') {
-      throw new AppError('Only sessions with changes requested can be resubmitted', 400, 'INVALID_TRANSITION');
-    }
-
-    const now = new Date();
-    const [updated] = await db
-      .update(sessions)
-      .set({
-        workflowStatus: 'submitted',
-        submittedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(sessions.id, id))
-      .returning();
-
-    await logAudit({
-      actorId: user.id,
-      action: 'SESSION_RESUBMITTED',
-      resourceType: 'session',
-      resourceId: id,
-    });
-
-    return {
-      success: true,
-      message: 'Session report corrected and resubmitted for Organizer review',
-      data: updated,
-    };
-  });
+  );

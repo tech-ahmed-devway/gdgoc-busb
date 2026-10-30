@@ -57,12 +57,12 @@ export const dashboardRoutes = new Elysia({ prefix: '/dashboard' })
 
       statusCounts.forEach((s) => {
         totalSessions += s.count;
+        approvedAttendance += s.totalAttendance;
         if (s.status === 'draft') draftSessions = s.count;
         if (s.status === 'submitted') submittedSessions = s.count;
         if (s.status === 'changes_requested') changesRequestedSessions = s.count;
         if (s.status === 'approved') {
           approvedSessions = s.count;
-          approvedAttendance = s.totalAttendance;
         }
       });
 
@@ -222,12 +222,12 @@ export const dashboardRoutes = new Elysia({ prefix: '/dashboard' })
 
     trackStatusCounts.forEach((s) => {
       myTotalSessions += s.count;
+      myAttendance += s.attendance;
       if (s.status === 'draft') myDrafts = s.count;
       if (s.status === 'submitted') mySubmitted = s.count;
       if (s.status === 'changes_requested') myChangesRequested = s.count;
       if (s.status === 'approved') {
         myApproved = s.count;
-        myAttendance = s.attendance;
       }
     });
 

@@ -15,7 +15,13 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
   'image/gif',
   'application/pdf',
+  'application/vnd.ms-powerpoint', // .ppt
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/vnd.oasis.opendocument.presentation', // .odp
+  'application/vnd.apple.keynote',
 ];
+
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf', '.ppt', '.pptx', '.odp', '.key'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export const sessionAssetRoutes = new Elysia()
@@ -53,8 +59,16 @@ export const sessionAssetRoutes = new Elysia()
         throw new AppError('No file provided', 400, 'FILE_MISSING');
       }
 
-      if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-        throw new AppError('Invalid file type. Allowed: JPEG, PNG, WebP, GIF, PDF', 400, 'INVALID_FILE_TYPE');
+      const ext = path.extname(file.name || '').toLowerCase();
+      const isAllowedMime = ALLOWED_MIME_TYPES.includes(file.type);
+      const isAllowedExt = ALLOWED_EXTENSIONS.includes(ext);
+
+      if (!isAllowedMime && !isAllowedExt) {
+        throw new AppError(
+          'Invalid file type. Allowed: Images (JPEG, PNG, WebP, GIF), Documents (PDF), Presentations (PPT, PPTX, ODP)',
+          400,
+          'INVALID_FILE_TYPE'
+        );
       }
 
       if (file.size > MAX_FILE_SIZE) {
