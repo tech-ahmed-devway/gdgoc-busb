@@ -1,5 +1,5 @@
-import { Elysia, t } from 'elysia';
-import { db } from '../../db';
+import { Elysia, t } from "elysia";
+import { db } from "../../db";
 import {
   sessions,
   tracks,
@@ -7,31 +7,37 @@ import {
   users,
   sessionAssets,
   sessionReviews,
-} from '../../db/schema';
-import { eq, and, desc, asc, sql, ilike, or } from 'drizzle-orm';
-import { AppError } from '../../middleware/error';
+} from "../../db/schema";
+import { eq, and, desc, asc, sql, ilike, or } from "drizzle-orm";
+import { AppError } from "../../middleware/error";
 import {
   resolveAuthUser,
   isOrganizer,
   canAccessTrack,
   isApprovedLeader,
-} from '../../middleware/auth';
-import { logAudit } from '../../lib/audit';
-import { StorageService } from '../../lib/storage';
+} from "../../middleware/auth";
+import { logAudit } from "../../lib/audit";
+import { StorageService } from "../../lib/storage";
 
-export const sessionRoutes = new Elysia({ prefix: '/sessions' })
+export const sessionRoutes = new Elysia({ prefix: "/sessions" })
   // List sessions with filtering, pagination, and search
-  .get('/', async ({ query, headers, jwt }) => {
-    const authHeader = headers['authorization'];
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+  .get("/", async ({ query, headers, jwt }) => {
+    const authHeader = headers["authorization"];
+    if (!authHeader?.startsWith("Bearer ")) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
     }
-    const payload = (await (jwt as any).verify(authHeader.substring(7))) as { sub: string } | null;
+    const payload = (await (jwt as any).verify(authHeader.substring(7))) as {
+      sub: string;
+    } | null;
     if (!payload?.sub) {
-      throw new AppError('Unauthorized: Invalid or expired token', 401, 'INVALID_TOKEN');
+      throw new AppError(
+        "Unauthorized: Invalid or expired token",
+        401,
+        "INVALID_TOKEN",
+      );
     }
     const user = await resolveAuthUser(payload.sub);
-    if (!user) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+    if (!user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
 
     const {
       trackId,
@@ -39,10 +45,10 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
       workflowStatus,
       mode,
       search,
-      page = '1',
-      limit = '10',
-      sortBy = 'startsAt',
-      sortOrder = 'desc',
+      page = "1",
+      limit = "10",
+      sortBy = "sessionNumber",
+      sortOrder = "desc",
     } = query as any;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -53,26 +59,30 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
 
     // Track Authorization enforcement
     if (isOrganizer(user)) {
-      if (trackId && trackId !== 'all') {
+      if (trackId && trackId !== "all") {
         conditions.push(eq(sessions.trackId, trackId));
       }
     } else {
       // Head / Vice Head only sees their authorized track
       if (!user.membership?.trackId) {
-        throw new AppError('No authorized track membership found', 403, 'NO_TRACK_MEMBERSHIP');
+        throw new AppError(
+          "No authorized track membership found",
+          403,
+          "NO_TRACK_MEMBERSHIP",
+        );
       }
       conditions.push(eq(sessions.trackId, user.membership.trackId));
     }
 
-    if (seasonId && seasonId !== 'all') {
+    if (seasonId && seasonId !== "all") {
       conditions.push(eq(sessions.seasonId, seasonId));
     }
 
-    if (workflowStatus && workflowStatus !== 'all') {
+    if (workflowStatus && workflowStatus !== "all") {
       conditions.push(eq(sessions.workflowStatus, workflowStatus));
     }
 
-    if (mode && mode !== 'all') {
+    if (mode && mode !== "all") {
       conditions.push(eq(sessions.mode, mode));
     }
 
@@ -81,8 +91,8 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
       conditions.push(
         or(
           ilike(sessions.title, searchPattern),
-          ilike(sessions.content, searchPattern)
-        )
+          ilike(sessions.content, searchPattern),
+        ),
       );
     }
 
@@ -97,8 +107,10 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
     const total = countResult?.count || 0;
 
     // Sort order
-    const orderColumn = sortBy === 'sessionNumber' ? sessions.sessionNumber : sessions.startsAt;
-    const orderDirection = sortOrder === 'asc' ? asc(orderColumn) : desc(orderColumn);
+    const orderColumn =
+      sortBy === "sessionNumber" ? sessions.sessionNumber : sessions.startsAt;
+    const orderDirection =
+      sortOrder === "asc" ? asc(orderColumn) : desc(orderColumn);
 
     // Fetch paginated sessions
     const sessionList = await db
@@ -149,17 +161,23 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
   })
 
   // Get single session report details
-  .get('/:id', async ({ params: { id }, headers, jwt }) => {
-    const authHeader = headers['authorization'];
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+  .get("/:id", async ({ params: { id }, headers, jwt }) => {
+    const authHeader = headers["authorization"];
+    if (!authHeader?.startsWith("Bearer ")) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
     }
-    const payload = (await (jwt as any).verify(authHeader.substring(7))) as { sub: string } | null;
+    const payload = (await (jwt as any).verify(authHeader.substring(7))) as {
+      sub: string;
+    } | null;
     if (!payload?.sub) {
-      throw new AppError('Unauthorized: Invalid or expired token', 401, 'INVALID_TOKEN');
+      throw new AppError(
+        "Unauthorized: Invalid or expired token",
+        401,
+        "INVALID_TOKEN",
+      );
     }
     const user = await resolveAuthUser(payload.sub);
-    if (!user) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+    if (!user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
 
     const [sessionRecord] = await db
       .select({
@@ -198,12 +216,16 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
       .limit(1);
 
     if (!sessionRecord) {
-      throw new AppError('Session report not found', 404, 'SESSION_NOT_FOUND');
+      throw new AppError("Session report not found", 404, "SESSION_NOT_FOUND");
     }
 
     // Permission check: Organizer or leader of the session's track
     if (!canAccessTrack(user, sessionRecord.trackId)) {
-      throw new AppError('You do not have permission to view this track session', 403, 'FORBIDDEN');
+      throw new AppError(
+        "You do not have permission to view this track session",
+        403,
+        "FORBIDDEN",
+      );
     }
 
     // Fetch assets
@@ -251,18 +273,24 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
 
   // Create Session Report (Published immediately)
   .post(
-    '/',
+    "/",
     async ({ body, headers, jwt }) => {
-      const authHeader = headers['authorization'];
-      if (!authHeader?.startsWith('Bearer ')) {
-        throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+      const authHeader = headers["authorization"];
+      if (!authHeader?.startsWith("Bearer ")) {
+        throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
       }
-      const payload = (await (jwt as any).verify(authHeader.substring(7))) as { sub: string } | null;
+      const payload = (await (jwt as any).verify(authHeader.substring(7))) as {
+        sub: string;
+      } | null;
       if (!payload?.sub) {
-        throw new AppError('Unauthorized: Invalid or expired token', 401, 'INVALID_TOKEN');
+        throw new AppError(
+          "Unauthorized: Invalid or expired token",
+          401,
+          "INVALID_TOKEN",
+        );
       }
       const user = await resolveAuthUser(payload.sub);
-      if (!user) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+      if (!user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
 
       const {
         trackId,
@@ -284,29 +312,48 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
 
       // Track authorization check
       if (!canAccessTrack(user, trackId)) {
-        throw new AppError('You can only create sessions for your assigned track', 403, 'FORBIDDEN_TRACK_ACCESS');
+        throw new AppError(
+          "You can only create sessions for your assigned track",
+          403,
+          "FORBIDDEN_TRACK_ACCESS",
+        );
       }
 
       // Validate dates
       const startDate = new Date(startsAt);
       const endDate = new Date(endsAt);
       if (endDate <= startDate) {
-        throw new AppError('End time must be later than start time', 400, 'INVALID_TIME_RANGE');
+        throw new AppError(
+          "End time must be later than start time",
+          400,
+          "INVALID_TIME_RANGE",
+        );
       }
 
       // Validate session number
       if (sessionNumber <= 0 || !Number.isInteger(sessionNumber)) {
-        throw new AppError('Session number must be a positive integer', 400, 'INVALID_SESSION_NUMBER');
+        throw new AppError(
+          "Session number must be a positive integer",
+          400,
+          "INVALID_SESSION_NUMBER",
+        );
       }
 
       // Validate attendance
       if (attendanceCount < 0 || !Number.isInteger(attendanceCount)) {
-        throw new AppError('Attendance count must be a non-negative integer', 400, 'INVALID_ATTENDANCE');
+        throw new AppError(
+          "Attendance count must be a non-negative integer",
+          400,
+          "INVALID_ATTENDANCE",
+        );
       }
 
-    
-      if (mode === 'offline' && (!location || location.trim().length === 0)) {
-        throw new AppError('Offline sessions require a physical location', 400, 'MISSING_LOCATION');
+      if (mode === "offline" && (!location || location.trim().length === 0)) {
+        throw new AppError(
+          "Offline sessions require a physical location",
+          400,
+          "MISSING_LOCATION",
+        );
       }
 
       // Check uniqueness of session_number per (track_id, season_id)
@@ -317,8 +364,8 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
           and(
             eq(sessions.trackId, trackId),
             eq(sessions.seasonId, seasonId),
-            eq(sessions.sessionNumber, sessionNumber)
-          )
+            eq(sessions.sessionNumber, sessionNumber),
+          ),
         )
         .limit(1);
 
@@ -326,7 +373,7 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         throw new AppError(
           `Session #${sessionNumber} already exists for this track in this season`,
           409,
-          'DUPLICATE_SESSION_NUMBER'
+          "DUPLICATE_SESSION_NUMBER",
         );
       }
 
@@ -344,14 +391,14 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
           startsAt: startDate,
           endsAt: endDate,
           mode,
-          meetingUrl: mode === 'online' ? meetingUrl?.trim() || null : null,
-          location: mode === 'offline' ? location?.trim() || null : null,
+          meetingUrl: mode === "online" ? meetingUrl?.trim() || null : null,
+          location: mode === "offline" ? location?.trim() || null : null,
           recordingUrl: recordingUrl?.trim() || null,
           attendanceCount,
           notes: notes?.trim() || null,
           learningOutcomes: learningOutcomes?.trim() || null,
           challengesFaced: challengesFaced?.trim() || null,
-          workflowStatus: 'approved',
+          workflowStatus: "approved",
           createdBy: user.id,
           submittedAt: now,
           reviewedBy: user.id,
@@ -361,20 +408,20 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
 
       await logAudit({
         actorId: user.id,
-        action: 'SESSION_PUBLISHED',
-        resourceType: 'session',
+        action: "SESSION_PUBLISHED",
+        resourceType: "session",
         resourceId: newSession.id,
         metadata: {
           sessionNumber,
           title: newSession.title,
           trackId,
-          status: 'approved',
+          status: "approved",
         },
       });
 
       return {
         success: true,
-        message: 'Session report published successfully',
+        message: "Session report published successfully",
         data: newSession,
       };
     },
@@ -387,7 +434,7 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         content: t.String({ minLength: 5 }),
         startsAt: t.String(),
         endsAt: t.String(),
-        mode: t.Union([t.Literal('online'), t.Literal('offline')]),
+        mode: t.Union([t.Literal("online"), t.Literal("offline")]),
         meetingUrl: t.Optional(t.String()),
         location: t.Optional(t.String()),
         recordingUrl: t.Optional(t.String()),
@@ -396,23 +443,29 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         learningOutcomes: t.Optional(t.String()),
         challengesFaced: t.Optional(t.String()),
       }),
-    }
+    },
   )
 
   // Update Session Report (Handles both PATCH and PUT)
   .patch(
-    '/:id',
+    "/:id",
     async ({ params: { id }, body, headers, jwt }) => {
-      const authHeader = headers['authorization'];
-      if (!authHeader?.startsWith('Bearer ')) {
-        throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+      const authHeader = headers["authorization"];
+      if (!authHeader?.startsWith("Bearer ")) {
+        throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
       }
-      const payload = (await (jwt as any).verify(authHeader.substring(7))) as { sub: string } | null;
+      const payload = (await (jwt as any).verify(authHeader.substring(7))) as {
+        sub: string;
+      } | null;
       if (!payload?.sub) {
-        throw new AppError('Unauthorized: Invalid or expired token', 401, 'INVALID_TOKEN');
+        throw new AppError(
+          "Unauthorized: Invalid or expired token",
+          401,
+          "INVALID_TOKEN",
+        );
       }
       const user = await resolveAuthUser(payload.sub);
-      if (!user) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+      if (!user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
 
       const [existing] = await db
         .select()
@@ -421,32 +474,49 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         .limit(1);
 
       if (!existing) {
-        throw new AppError('Session report not found', 404, 'SESSION_NOT_FOUND');
+        throw new AppError(
+          "Session report not found",
+          404,
+          "SESSION_NOT_FOUND",
+        );
       }
 
       // Check track authorization (Organizer or Track Head / Vice Head)
       if (!canAccessTrack(user, existing.trackId)) {
-        throw new AppError('You do not have permission to modify this session', 403, 'FORBIDDEN');
+        throw new AppError(
+          "You do not have permission to modify this session",
+          403,
+          "FORBIDDEN",
+        );
       }
 
       const updateData: Partial<typeof sessions.$inferInsert> = {
-        workflowStatus: 'approved',
+        workflowStatus: "approved",
         updatedAt: new Date(),
       };
 
       if (body.title !== undefined) updateData.title = body.title.trim();
       if (body.content !== undefined) updateData.content = body.content.trim();
-      if (body.sessionNumber !== undefined) updateData.sessionNumber = body.sessionNumber;
-      if (body.startsAt !== undefined) updateData.startsAt = new Date(body.startsAt);
+      if (body.sessionNumber !== undefined)
+        updateData.sessionNumber = body.sessionNumber;
+      if (body.startsAt !== undefined)
+        updateData.startsAt = new Date(body.startsAt);
       if (body.endsAt !== undefined) updateData.endsAt = new Date(body.endsAt);
       if (body.mode !== undefined) updateData.mode = body.mode;
-      if (body.meetingUrl !== undefined) updateData.meetingUrl = body.meetingUrl?.trim() || null;
-      if (body.location !== undefined) updateData.location = body.location?.trim() || null;
-      if (body.recordingUrl !== undefined) updateData.recordingUrl = body.recordingUrl?.trim() || null;
-      if (body.attendanceCount !== undefined) updateData.attendanceCount = body.attendanceCount;
-      if (body.notes !== undefined) updateData.notes = body.notes?.trim() || null;
-      if (body.learningOutcomes !== undefined) updateData.learningOutcomes = body.learningOutcomes?.trim() || null;
-      if (body.challengesFaced !== undefined) updateData.challengesFaced = body.challengesFaced?.trim() || null;
+      if (body.meetingUrl !== undefined)
+        updateData.meetingUrl = body.meetingUrl?.trim() || null;
+      if (body.location !== undefined)
+        updateData.location = body.location?.trim() || null;
+      if (body.recordingUrl !== undefined)
+        updateData.recordingUrl = body.recordingUrl?.trim() || null;
+      if (body.attendanceCount !== undefined)
+        updateData.attendanceCount = body.attendanceCount;
+      if (body.notes !== undefined)
+        updateData.notes = body.notes?.trim() || null;
+      if (body.learningOutcomes !== undefined)
+        updateData.learningOutcomes = body.learningOutcomes?.trim() || null;
+      if (body.challengesFaced !== undefined)
+        updateData.challengesFaced = body.challengesFaced?.trim() || null;
 
       const [updatedSession] = await db
         .update(sessions)
@@ -456,15 +526,15 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
 
       await logAudit({
         actorId: user.id,
-        action: 'SESSION_UPDATED',
-        resourceType: 'session',
+        action: "SESSION_UPDATED",
+        resourceType: "session",
         resourceId: id,
         metadata: updateData,
       });
 
       return {
         success: true,
-        message: 'Session report updated successfully',
+        message: "Session report updated successfully",
         data: updatedSession,
       };
     },
@@ -475,7 +545,7 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         sessionNumber: t.Optional(t.Integer({ minimum: 1 })),
         startsAt: t.Optional(t.String()),
         endsAt: t.Optional(t.String()),
-        mode: t.Optional(t.Union([t.Literal('online'), t.Literal('offline')])),
+        mode: t.Optional(t.Union([t.Literal("online"), t.Literal("offline")])),
         meetingUrl: t.Optional(t.String()),
         location: t.Optional(t.String()),
         recordingUrl: t.Optional(t.String()),
@@ -484,22 +554,28 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         learningOutcomes: t.Optional(t.String()),
         challengesFaced: t.Optional(t.String()),
       }),
-    }
+    },
   )
 
   .put(
-    '/:id',
+    "/:id",
     async ({ params: { id }, body, headers, jwt }) => {
-      const authHeader = headers['authorization'];
-      if (!authHeader?.startsWith('Bearer ')) {
-        throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+      const authHeader = headers["authorization"];
+      if (!authHeader?.startsWith("Bearer ")) {
+        throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
       }
-      const payload = (await (jwt as any).verify(authHeader.substring(7))) as { sub: string } | null;
+      const payload = (await (jwt as any).verify(authHeader.substring(7))) as {
+        sub: string;
+      } | null;
       if (!payload?.sub) {
-        throw new AppError('Unauthorized: Invalid or expired token', 401, 'INVALID_TOKEN');
+        throw new AppError(
+          "Unauthorized: Invalid or expired token",
+          401,
+          "INVALID_TOKEN",
+        );
       }
       const user = await resolveAuthUser(payload.sub);
-      if (!user) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+      if (!user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
 
       const [existing] = await db
         .select()
@@ -508,31 +584,48 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         .limit(1);
 
       if (!existing) {
-        throw new AppError('Session report not found', 404, 'SESSION_NOT_FOUND');
+        throw new AppError(
+          "Session report not found",
+          404,
+          "SESSION_NOT_FOUND",
+        );
       }
 
       if (!canAccessTrack(user, existing.trackId)) {
-        throw new AppError('You do not have permission to modify this session', 403, 'FORBIDDEN');
+        throw new AppError(
+          "You do not have permission to modify this session",
+          403,
+          "FORBIDDEN",
+        );
       }
 
       const updateData: Partial<typeof sessions.$inferInsert> = {
-        workflowStatus: 'approved',
+        workflowStatus: "approved",
         updatedAt: new Date(),
       };
 
       if (body.title !== undefined) updateData.title = body.title.trim();
       if (body.content !== undefined) updateData.content = body.content.trim();
-      if (body.sessionNumber !== undefined) updateData.sessionNumber = body.sessionNumber;
-      if (body.startsAt !== undefined) updateData.startsAt = new Date(body.startsAt);
+      if (body.sessionNumber !== undefined)
+        updateData.sessionNumber = body.sessionNumber;
+      if (body.startsAt !== undefined)
+        updateData.startsAt = new Date(body.startsAt);
       if (body.endsAt !== undefined) updateData.endsAt = new Date(body.endsAt);
       if (body.mode !== undefined) updateData.mode = body.mode;
-      if (body.meetingUrl !== undefined) updateData.meetingUrl = body.meetingUrl?.trim() || null;
-      if (body.location !== undefined) updateData.location = body.location?.trim() || null;
-      if (body.recordingUrl !== undefined) updateData.recordingUrl = body.recordingUrl?.trim() || null;
-      if (body.attendanceCount !== undefined) updateData.attendanceCount = body.attendanceCount;
-      if (body.notes !== undefined) updateData.notes = body.notes?.trim() || null;
-      if (body.learningOutcomes !== undefined) updateData.learningOutcomes = body.learningOutcomes?.trim() || null;
-      if (body.challengesFaced !== undefined) updateData.challengesFaced = body.challengesFaced?.trim() || null;
+      if (body.meetingUrl !== undefined)
+        updateData.meetingUrl = body.meetingUrl?.trim() || null;
+      if (body.location !== undefined)
+        updateData.location = body.location?.trim() || null;
+      if (body.recordingUrl !== undefined)
+        updateData.recordingUrl = body.recordingUrl?.trim() || null;
+      if (body.attendanceCount !== undefined)
+        updateData.attendanceCount = body.attendanceCount;
+      if (body.notes !== undefined)
+        updateData.notes = body.notes?.trim() || null;
+      if (body.learningOutcomes !== undefined)
+        updateData.learningOutcomes = body.learningOutcomes?.trim() || null;
+      if (body.challengesFaced !== undefined)
+        updateData.challengesFaced = body.challengesFaced?.trim() || null;
 
       const [updatedSession] = await db
         .update(sessions)
@@ -542,15 +635,15 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
 
       await logAudit({
         actorId: user.id,
-        action: 'SESSION_UPDATED',
-        resourceType: 'session',
+        action: "SESSION_UPDATED",
+        resourceType: "session",
         resourceId: id,
         metadata: updateData,
       });
 
       return {
         success: true,
-        message: 'Session report updated successfully',
+        message: "Session report updated successfully",
         data: updatedSession,
       };
     },
@@ -561,7 +654,7 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         sessionNumber: t.Optional(t.Integer({ minimum: 1 })),
         startsAt: t.Optional(t.String()),
         endsAt: t.Optional(t.String()),
-        mode: t.Optional(t.Union([t.Literal('online'), t.Literal('offline')])),
+        mode: t.Optional(t.Union([t.Literal("online"), t.Literal("offline")])),
         meetingUrl: t.Optional(t.String()),
         location: t.Optional(t.String()),
         recordingUrl: t.Optional(t.String()),
@@ -570,5 +663,5 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         learningOutcomes: t.Optional(t.String()),
         challengesFaced: t.Optional(t.String()),
       }),
-    }
+    },
   );
