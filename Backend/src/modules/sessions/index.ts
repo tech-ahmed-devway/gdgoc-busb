@@ -304,10 +304,7 @@ export const sessionRoutes = new Elysia({ prefix: '/sessions' })
         throw new AppError('Attendance count must be a non-negative integer', 400, 'INVALID_ATTENDANCE');
       }
 
-      // Check online / offline conditional requirements
-      if (mode === 'online' && (!meetingUrl || !meetingUrl.startsWith('http'))) {
-        throw new AppError('Online sessions require a valid meeting URL', 400, 'MISSING_MEETING_URL');
-      }
+    
       if (mode === 'offline' && (!location || location.trim().length === 0)) {
         throw new AppError('Offline sessions require a physical location', 400, 'MISSING_LOCATION');
       }

@@ -90,6 +90,16 @@ export async function runSeed() {
       description:
         "Embedded systems are computer systems that are designed to perform specific functions within a larger mechanical or electronic system. They are widely used in various applications, including automotive, aerospace, industrial automation, and consumer electronics.",
     },
+    {
+      name: "HR",
+      description:
+        "Human Resources management, recruitment, team coordination, member engagement, and organizational development.",
+    },
+    {
+      name: "BOARD",
+      description:
+        "Chapter leadership, strategic planning, operations management, partnerships, and overall organizational direction.",
+    },
   ];
 
   const trackMap = new Map<string, string>();
