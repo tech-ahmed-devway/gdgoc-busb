@@ -48,7 +48,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
       page = "1",
       limit = "10",
       sortBy = "sessionNumber",
-      sortOrder = "desc",
+      sortOrder = "asc",
     } = query as any;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
